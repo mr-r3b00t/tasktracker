@@ -1,0 +1,710 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Tracker</title>
+    <style>
+        :root {
+            --bg-color: #f7fafc;
+            --card-bg: #ffffff;
+            --text-color: #2d3748;
+            --primary-color: #3182ce;
+            --border-color: #e2e8f0;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a202c;
+            --card-bg: #2d3748;
+            --text-color: #e2e8f0;
+            --primary-color: #63b3ed;
+            --border-color: #4a5568;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .input-container {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        input[type="file"] {
+            margin-bottom: 12px;
+            color: var(--text-color);
+        }
+
+        button {
+            padding: 10px 20px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-right: 8px;
+            transition: transform 0.2s ease, background-color 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .log-btn {
+            background-color: var(--primary-color);
+        }
+
+        .export-btn {
+            background-color: #17a2b8;
+        }
+
+        .import-btn {
+            background-color: #6f42c1;
+        }
+
+        .start-btn {
+            background-color: #28a745;
+        }
+
+        .pause-btn {
+            background-color: #fd7e14;
+        }
+
+        .stop-btn {
+            background-color: #dc3545;
+        }
+
+        .reset-btn {
+            background-color: #6c757d;
+        }
+
+        #logOutput {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            min-height: 200px;
+        }
+
+        .log-entry {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .log-entry img {
+            max-width: 200px;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
+
+        .log-entry a {
+            color: var(--primary-color);
+            text-decoration: none;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .log-entry a:hover {
+            text-decoration: underline;
+        }
+
+        .timestamp {
+            color: #a0aec0;
+            font-size: 0.9em;
+        }
+
+        .elapsed-time {
+            color: #a0aec0;
+            font-size: 0.9em;
+            font-family: monospace;
+        }
+
+        .username {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .stopwatch-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+
+        .stopwatch {
+            font-family: monospace;
+            font-size: 1.2em;
+            background-color: var(--card-bg);
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        .stopwatch-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .export-import-container {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+        }
+
+        #importInput {
+            display: none;
+        }
+
+        .total-time {
+            background-color: var(--card-bg);
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: center;
+            color: var(--text-color);
+        }
+
+        .total-time span {
+            font-family: monospace;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    <h1>Activity Tracker</h1>
+    <div class="input-container">
+        <input type="text" id="nameInput" placeholder="Enter your name..." value="">
+        <textarea id="textInput" placeholder="Enter your activity log (press Enter to submit)..."></textarea>
+        <input type="file" id="fileInput" multiple>
+        <div class="stopwatch-container">
+            <div class="stopwatch" id="stopwatch">00:00:00.000</div>
+            <div class="stopwatch-controls" id="stopwatchControls">
+                <button class="start-btn" id="startBtn" onclick="startStopwatch()">Start</button>
+                <button class="reset-btn" id="resetBtn" onclick="resetStopwatch()">Reset</button>
+            </div>
+        </div>
+        <div class="action-buttons">
+            <button class="log-btn" onclick="logEntry()">Log Entry</button>
+        </div>
+    </div>
+    <div class="total-time" id="totalTime">Total Recorded Time: <span>00:00:00.000</span></div>
+    <div id="logOutput"></div>
+    <div class="export-import-container">
+        <button class="export-btn" onclick="exportLogs()">Export Logs</button>
+        <button class="import-btn" onclick="document.getElementById('importInput').click()">Import Logs</button>
+        <input type="file" id="importInput" accept=".json" onchange="importLogs(event)">
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            html.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
+        }
+
+        // Stopwatch functionality
+        let stopwatchInterval = null;
+        let elapsedTime = 0;
+        let isRunning = false;
+
+        function formatTime(ms) {
+            const hours = Math.floor(ms / 3600000).toString().padStart(2, '0');
+            const minutes = Math.floor((ms % 3600000) / 60000).toString().padStart(2, '0');
+            const seconds = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0');
+            const milliseconds = (ms % 1000).toString().padStart(3, '0');
+            return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+        }
+
+        function updateStopwatch() {
+            elapsedTime += 10;
+            document.getElementById('stopwatch').textContent = formatTime(elapsedTime);
+        }
+
+        function updateButtons() {
+            const controls = document.getElementById('stopwatchControls');
+            controls.innerHTML = '';
+            if (isRunning) {
+                controls.innerHTML = `
+                    <button class="pause-btn" onclick="pauseStopwatch()">Pause</button>
+                    <button class="stop-btn" onclick="stopStopwatch()">Stop</button>
+                    <button class="reset-btn" onclick="resetStopwatch()">Reset</button>
+                `;
+            } else {
+                controls.innerHTML = `
+                    <button class="start-btn" onclick="startStopwatch()">Start</button>
+                    <button class="reset-btn" onclick="resetStopwatch()">Reset</button>
+                `;
+            }
+        }
+
+        function startStopwatch() {
+            if (!isRunning) {
+                isRunning = true;
+                stopwatchInterval = setInterval(updateStopwatch, 10);
+                document.getElementById('stopwatch').style.backgroundColor = '#e0ffe0';
+                updateButtons();
+            }
+        }
+
+        function pauseStopwatch() {
+            if (isRunning) {
+                isRunning = false;
+                clearInterval(stopwatchInterval);
+                document.getElementById('stopwatch').style.backgroundColor = '';
+                updateButtons();
+            }
+        }
+
+        function stopStopwatch() {
+            if (isRunning) {
+                isRunning = false;
+                clearInterval(stopwatchInterval);
+                document.getElementById('stopwatch').style.backgroundColor = '';
+                updateButtons();
+            }
+        }
+
+        function resetStopwatch() {
+            isRunning = false;
+            clearInterval(stopwatchInterval);
+            elapsedTime = 0;
+            document.getElementById('stopwatch').textContent = formatTime(elapsedTime);
+            document.getElementById('stopwatch').style.backgroundColor = '';
+            updateButtons();
+        }
+
+        // Load saved name from localStorage
+        const nameInput = document.getElementById('nameInput');
+        nameInput.value = localStorage.getItem('loggerName') || '';
+        
+        // Save name to localStorage on input
+        nameInput.addEventListener('input', () => {
+            localStorage.setItem('loggerName', nameInput.value);
+        });
+
+        function getTimestamp() {
+            return new Date().toLocaleString();
+        }
+
+        // Parse time string (HH:MM:SS.mmm) to milliseconds
+        function parseTime(timeStr) {
+            if (!timeStr) return 0;
+            const [hours, minutes, secondsMs] = timeStr.split(':');
+            const [seconds, milliseconds] = secondsMs.split('.').map(Number);
+            return (Number(hours) * 3600000) + (Number(minutes) * 60000) + (seconds * 1000) + (milliseconds || 0);
+        }
+
+        // Update total recorded time
+        function updateTotalTime() {
+            const logEntries = document.getElementsByClassName('log-entry');
+            let totalMs = 0;
+            for (let entry of logEntries) {
+                const elapsedTimeDiv = entry.getElementsByClassName('elapsed-time')[0];
+                if (elapsedTimeDiv) {
+                    const timeStr = elapsedTimeDiv.textContent.replace('Elapsed Time: ', '');
+                    totalMs += parseTime(timeStr);
+                }
+            }
+            document.getElementById('totalTime').innerHTML = `Total Recorded Time: <span>${formatTime(totalMs)}</span>`;
+            return totalMs;
+        }
+
+        // Convert file to base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function logEntry() {
+            const nameInputValue = document.getElementById('nameInput').value.trim();
+            const textInput = document.getElementById('textInput').value;
+            const fileInput = document.getElementById('fileInput').files;
+            const logOutput = document.getElementById('logOutput');
+
+            if (!nameInputValue) {
+                alert('Please enter your name.');
+                return;
+            }
+
+            if (!textInput && fileInput.length === 0) {
+                alert('Please enter text or select at least one file.');
+                return;
+            }
+
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+
+            const timestamp = document.createElement('div');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = getTimestamp();
+            logEntry.appendChild(timestamp);
+
+            const username = document.createElement('div');
+            username.className = 'username';
+            username.textContent = `Logged by: ${nameInputValue}`;
+            logEntry.appendChild(username);
+
+            // Add elapsed time if stopwatch has recorded time
+            if (elapsedTime > 0) {
+                const elapsedTimeDiv = document.createElement('div');
+                elapsedTimeDiv.className = 'elapsed-time';
+                elapsedTimeDiv.textContent = `Elapsed Time: ${formatTime(elapsedTime)}`;
+                logEntry.appendChild(elapsedTimeDiv);
+            }
+
+            if (textInput) {
+                const text = document.createElement('p');
+                text.textContent = textInput;
+                logEntry.appendChild(text);
+            }
+
+            for (let file of fileInput) {
+                if (file.type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.alt = file.name;
+                    logEntry.appendChild(img);
+                } else {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(file);
+                    link.download = file.name;
+                    link.textContent = `Attachment: ${file.name}`;
+                    logEntry.appendChild(link);
+                }
+            }
+
+            logOutput.prepend(logEntry);
+            document.getElementById('textInput').value = '';
+            document.getElementById('fileInput').value = '';
+            
+            // Reset stopwatch after successful log
+            resetStopwatch();
+            updateTotalTime();
+        }
+
+        // Add event listener for Enter key in textarea
+        const textInput = document.getElementById('textInput');
+        textInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                logEntry();
+            }
+        });
+
+        // Export logs to JSON
+        async function exportLogs() {
+            const logOutput = document.getElementById('logOutput');
+            const logEntries = logOutput.getElementsByClassName('log-entry');
+            const exportData = {
+                totalTime: document.getElementById('totalTime').querySelector('span').textContent,
+                logs: []
+            };
+
+            for (let entry of logEntries) {
+                const timestamp = entry.getElementsByClassName('timestamp')[0]?.textContent;
+                const username = entry.getElementsByClassName('username')[0]?.textContent.replace('Logged by: ', '');
+                const elapsedTime = entry.getElementsByClassName('elapsed-time')[0]?.textContent.replace('Elapsed Time: ', '') || '';
+                const text = entry.getElementsByTagName('p')[0]?.textContent || '';
+                const files = [];
+
+                const images = entry.getElementsByTagName('img');
+                for (let img of images) {
+                    const src = img.src;
+                    if (src.startsWith('blob:')) {
+                        const response = await fetch(src);
+                        const blob = await response.blob();
+                        const base64 = await fileToBase64(blob);
+                        files.push({
+                            name: img.alt || 'image.png',
+                            type: blob.type,
+                            data: base64
+                        });
+                    } else {
+                        files.push({
+                            name: img.alt || 'image.png',
+                            type: 'image/png',
+                            data: src
+                        });
+                    }
+                }
+
+                const links = entry.getElementsByTagName('a');
+                for (let link of links) {
+                    const href = link.href;
+                    if (href.startsWith('blob:')) {
+                        const response = await fetch(href);
+                        const blob = await response.blob();
+                        const base64 = await fileToBase64(blob);
+                        files.push({
+                            name: link.download,
+                            type: blob.type,
+                            data: base64
+                        });
+                    } else {
+                        files.push({
+                            name: link.download,
+                            type: 'application/octet-stream',
+                            data: href
+                        });
+                    }
+                }
+
+                exportData.logs.push({
+                    timestamp,
+                    username,
+                    elapsedTime,
+                    text,
+                    files
+                });
+            }
+
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'activity_logs.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Import logs from JSON
+        function importLogs(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const logOutput = document.getElementById('logOutput');
+                    logOutput.innerHTML = ''; // Clear existing logs
+
+                    for (let entry of data.logs) {
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+
+                        if (entry.timestamp) {
+                            const timestamp = document.createElement('div');
+                            timestamp.className = 'timestamp';
+                            timestamp.textContent = entry.timestamp;
+                            logEntry.appendChild(timestamp);
+                        }
+
+                        if (entry.username) {
+                            const username = document.createElement('div');
+                            username.className = 'username';
+                            username.textContent = `Logged by: ${entry.username}`;
+                            logEntry.appendChild(username);
+                        }
+
+                        if (entry.elapsedTime) {
+                            const elapsedTimeDiv = document.createElement('div');
+                            elapsedTimeDiv.className = 'elapsed-time';
+                            elapsedTimeDiv.textContent = `Elapsed Time: ${entry.elapsedTime}`;
+                            logEntry.appendChild(elapsedTimeDiv);
+                        }
+
+                        if (entry.text) {
+                            const text = document.createElement('p');
+                            text.textContent = entry.text;
+                            logEntry.appendChild(text);
+                        }
+
+                        if (entry.files && entry.files.length > 0) {
+                            for (let file of entry.files) {
+                                if (file.type.startsWith('image/')) {
+                                    const img = document.createElement('img');
+                                    img.src = file.data;
+                                    img.alt = file.name;
+                                    logEntry.appendChild(img);
+                                } else {
+                                    const link = document.createElement('a');
+                                    link.href = file.data;
+                                    link.download = file.name;
+                                    link.textContent = `Attachment: ${file.name}`;
+                                    logEntry.appendChild(link);
+                                }
+                            }
+                        }
+
+                        logOutput.prepend(logEntry);
+                    }
+
+                    // Restore total time
+                    document.getElementById('totalTime').innerHTML = `Total Recorded Time: <span>${data.totalTime || '00:00:00.000'}</span>`;
+                } catch (err) {
+                    console.error('Error importing logs:', err);
+                    alert('Failed to import logs. Please ensure the file is a valid JSON.');
+                }
+            };
+            reader.readAsText(file);
+            // Reset the input to allow re-importing the same file
+            document.getElementById('importInput').value = '';
+        }
+
+        // Add event listener for paste keyboard shortcut
+        document.addEventListener('paste', async (event) => {
+            const items = event.clipboardData.items;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    const logOutput = document.getElementById('logOutput');
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry';
+
+                    const timestamp = document.createElement('div');
+                    timestamp.className = 'timestamp';
+                    timestamp.textContent = getTimestamp();
+                    logEntry.appendChild(timestamp);
+
+                    const username = document.createElement('div');
+                    username.className = 'username';
+                    username.textContent = `Logged by: ${document.getElementById('nameInput').value || 'Anonymous'}`;
+                    logEntry.appendChild(username);
+
+                    // Add elapsed time if stopwatch has recorded time
+                    if (elapsedTime > 0) {
+                        const elapsedTimeDiv = document.createElement('div');
+                        elapsedTimeDiv.className = 'elapsed-time';
+                        elapsedTimeDiv.textContent = `Elapsed Time: ${formatTime(elapsedTime)}`;
+                        logEntry.appendChild(elapsedTimeDiv);
+                    }
+
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(blob);
+                    img.alt = 'Pasted image';
+                    logEntry.appendChild(img);
+
+                    logOutput.prepend(logEntry);
+                    event.preventDefault();
+                    
+                    // Reset stopwatch after successful log
+                    resetStopwatch();
+                    updateTotalTime();
+                    break;
+                }
+            }
+        });
+
+        // Initialize total time on page load
+        updateTotalTime();
+    </script>
+</body>
+</html>
