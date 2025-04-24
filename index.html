@@ -130,6 +130,10 @@
             background-color: var(--primary-color);
         }
 
+        .photo-btn {
+            background-color: #e83e8c;
+        }
+
         .export-btn {
             background-color: #17a2b8;
         }
@@ -269,9 +273,19 @@
             h1 {
                 margin-top: 10px;
             }
+
+            .photo-btn {
+                display: inline-block;
+            }
         }
 
-        #importInput {
+        @media (min-width: 601px) {
+            .photo-btn {
+                display: none;
+            }
+        }
+
+        #importInput, #photoInput {
             display: none;
         }
 
@@ -291,6 +305,37 @@
             font-family: monospace;
             color: #a0aec0;
         }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal-content input[type="text"] {
+            margin: 10px 0;
+        }
+
+        .modal-content button {
+            margin: 10px 5px;
+        }
     </style>
 </head>
 <body>
@@ -308,7 +353,9 @@
             </div>
         </div>
         <div class="action-buttons">
-            <button class="log-btn" onclick="logEntry()">Log Entry</button>
+            <button class="log-btn" onclick="promptForNameAndLog()">Log Entry</button>
+            <button class="photo-btn" onclick="document.getElementById('photoInput').click()">Take Photo</button>
+            <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handlePhoto(event)">
         </div>
     </div>
     <div class="total-time" id="totalTime">Total Recorded Time: <span>00:00:00.000</span></div>
@@ -317,6 +364,17 @@
         <button class="export-btn" onclick="exportLogs()">Export Logs</button>
         <button class="import-btn" onclick="document.getElementById('importInput').click()">Import Logs</button>
         <input type="file" id="importInput" accept=".json" onchange="importLogs(event)">
+    </div>
+
+    <div class="modal" id="nameModal">
+        <div class="modal-content">
+            <h2>Enter Your Name</h2>
+            <input type="text" id="modalNameInput" placeholder="Your name...">
+            <div>
+                <button class="log-btn" onclick="submitName()">Submit</button>
+                <button class="reset-btn" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -331,6 +389,7 @@
         let stopwatchInterval = null;
         let elapsedTime = 0;
         let isRunning = false;
+        let pendingLogCallback = null;
 
         function formatTime(ms) {
             const hours = Math.floor(ms / 3600000).toString().padStart(2, '0');
@@ -444,14 +503,41 @@
             });
         }
 
-        async function logEntry() {
-            const nameInputValue = document.getElementById('nameInput').value.trim();
+        // Modal handling
+        function showNamePrompt(callback) {
+            pendingLogCallback = callback;
+            document.getElementById('nameModal').style.display = 'flex';
+            document.getElementById('modalNameInput').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('nameModal').style.display = 'none';
+            document.getElementById('modalNameInput').value = '';
+            pendingLogCallback = null;
+        }
+
+        function submitName() {
+            const modalName = document.getElementById('modalNameInput').value.trim();
+            if (!modalName) {
+                alert('Please enter a name.');
+                return;
+            }
+            document.getElementById('nameInput').value = modalName;
+            localStorage.setItem('loggerName', modalName);
+            closeModal();
+            if (pendingLogCallback) {
+                pendingLogCallback(modalName);
+            }
+        }
+
+        async function logEntry(name) {
+            const nameInputValue = name || document.getElementById('nameInput').value.trim();
             const textInput = document.getElementById('textInput').value;
             const fileInput = document.getElementById('fileInput').files;
             const logOutput = document.getElementById('logOutput');
 
             if (!nameInputValue) {
-                alert('Please enter your name.');
+                showNamePrompt(logEntry);
                 return;
             }
 
@@ -473,7 +559,6 @@
             username.textContent = `Logged by: ${nameInputValue}`;
             logEntry.appendChild(username);
 
-            // Add elapsed time if stopwatch has recorded time
             if (elapsedTime > 0) {
                 const elapsedTimeDiv = document.createElement('div');
                 elapsedTimeDiv.className = 'elapsed-time';
@@ -506,9 +591,63 @@
             document.getElementById('textInput').value = '';
             document.getElementById('fileInput').value = '';
             
-            // Reset stopwatch after successful log
             resetStopwatch();
             updateTotalTime();
+        }
+
+        function promptForNameAndLog() {
+            const nameInputValue = document.getElementById('nameInput').value.trim();
+            if (!nameInputValue) {
+                showNamePrompt(logEntry);
+            } else {
+                logEntry(nameInputValue);
+            }
+        }
+
+        async function handlePhoto(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const nameInputValue = document.getElementById('nameInput').value.trim();
+            const logOutput = document.getElementById('logOutput');
+
+            const addPhotoLog = async (name) => {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+
+                const timestamp = document.createElement('div');
+                timestamp.className = 'timestamp';
+                timestamp.textContent = getTimestamp();
+                logEntry.appendChild(timestamp);
+
+                const username = document.createElement('div');
+                username.className = 'username';
+                username.textContent = `Logged by: ${name}`;
+                logEntry.appendChild(username);
+
+                if (elapsedTime > 0) {
+                    const elapsedTimeDiv = document.createElement('div');
+                    elapsedTimeDiv.className = 'elapsed-time';
+                    elapsedTimeDiv.textContent = `Elapsed Time: ${formatTime(elapsedTime)}`;
+                    logEntry.appendChild(elapsedTimeDiv);
+                }
+
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = 'Captured photo';
+                logEntry.appendChild(img);
+
+                logOutput.prepend(logEntry);
+                document.getElementById('photoInput').value = '';
+                resetStopwatch();
+                updateTotalTime();
+            };
+
+            if (!nameInputValue) {
+                showNamePrompt(addPhotoLog);
+            } else {
+                await addPhotoLog(nameInputValue);
+            }
         }
 
         // Add event listener for Enter key in textarea
@@ -516,7 +655,7 @@
         textInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                logEntry();
+                promptForNameAndLog();
             }
         });
 
@@ -607,7 +746,7 @@
                 try {
                     const data = JSON.parse(e.target.result);
                     const logOutput = document.getElementById('logOutput');
-                    logOutput.innerHTML = ''; // Clear existing logs
+                    logOutput.innerHTML = '';
 
                     for (let entry of data.logs) {
                         const logEntry = document.createElement('div');
@@ -660,7 +799,6 @@
                         logOutput.prepend(logEntry);
                     }
 
-                    // Restore total time
                     document.getElementById('totalTime').innerHTML = `Total Recorded Time: <span>${data.totalTime || '00:00:00.000'}</span>`;
                 } catch (err) {
                     console.error('Error importing logs:', err);
@@ -668,7 +806,6 @@
                 }
             };
             reader.readAsText(file);
-            // Reset the input to allow re-importing the same file
             document.getElementById('importInput').value = '';
         }
 
@@ -687,30 +824,37 @@
                     timestamp.textContent = getTimestamp();
                     logEntry.appendChild(timestamp);
 
-                    const username = document.createElement('div');
-                    username.className = 'username';
-                    username.textContent = `Logged by: ${document.getElementById('nameInput').value || 'Anonymous'}`;
-                    logEntry.appendChild(username);
+                    const nameInputValue = document.getElementById('nameInput').value.trim();
+                    const addPasteLog = async (name) => {
+                        const username = document.createElement('div');
+                        username.className = 'username';
+                        username.textContent = `Logged by: ${name}`;
+                        logEntry.appendChild(username);
 
-                    // Add elapsed time if stopwatch has recorded time
-                    if (elapsedTime > 0) {
-                        const elapsedTimeDiv = document.createElement('div');
-                        elapsedTimeDiv.className = 'elapsed-time';
-                        elapsedTimeDiv.textContent = `Elapsed Time: ${formatTime(elapsedTime)}`;
-                        logEntry.appendChild(elapsedTimeDiv);
+                        if (elapsedTime > 0) {
+                            const elapsedTimeDiv = document.createElement('div');
+                            elapsedTimeDiv.className = 'elapsed-time';
+                            elapsedTimeDiv.textContent = `Elapsed Time: ${formatTime(elapsedTime)}`;
+                            logEntry.appendChild(elapsedTimeDiv);
+                        }
+
+                        const img = document.createElement('img');
+                        img.src = URL.createObjectURL(blob);
+                        img.alt = 'Pasted image';
+                        logEntry.appendChild(img);
+
+                        logOutput.prepend(logEntry);
+                        resetStopwatch();
+                        updateTotalTime();
+                    };
+
+                    if (!nameInputValue) {
+                        showNamePrompt(addPasteLog);
+                    } else {
+                        await addPasteLog(nameInputValue);
                     }
 
-                    const img = document.createElement('img');
-                    img.src = URL.createObjectURL(blob);
-                    img.alt = 'Pasted image';
-                    logEntry.appendChild(img);
-
-                    logOutput.prepend(logEntry);
                     event.preventDefault();
-                    
-                    // Reset stopwatch after successful log
-                    resetStopwatch();
-                    updateTotalTime();
                     break;
                 }
             }
