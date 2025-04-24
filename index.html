@@ -134,6 +134,10 @@
             background-color: #e83e8c;
         }
 
+        .location-btn {
+            background-color: #20c997;
+        }
+
         .export-btn {
             background-color: #17a2b8;
         }
@@ -274,13 +278,13 @@
                 margin-top: 10px;
             }
 
-            .photo-btn {
+            .photo-btn, .location-btn {
                 display: inline-block;
             }
         }
 
         @media (min-width: 601px) {
-            .photo-btn {
+            .photo-btn, .location-btn {
                 display: none;
             }
         }
@@ -355,6 +359,7 @@
         <div class="action-buttons">
             <button class="log-btn" onclick="promptForNameAndLog()">Log Entry</button>
             <button class="photo-btn" onclick="document.getElementById('photoInput').click()">Take Photo</button>
+            <button class="location-btn" onclick="tagLocation()">Tag Location</button>
             <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handlePhoto(event)">
         </div>
     </div>
@@ -528,6 +533,29 @@
             if (pendingLogCallback) {
                 pendingLogCallback(modalName);
             }
+        }
+
+        // Tag location with GPS coordinates
+        function tagLocation() {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your device or browser.');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    const textInput = document.getElementById('textInput');
+                    const currentText = textInput.value;
+                    const locationText = `[Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}]`;
+                    textInput.value = currentText ? `${currentText} ${locationText}` : locationText;
+                    textInput.focus();
+                },
+                (error) => {
+                    console.error('Geolocation error:', error);
+                    alert('Unable to retrieve location. Please ensure location services are enabled and permission is granted.');
+                }
+            );
         }
 
         async function logEntry(name) {
